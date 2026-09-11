@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install lightweight dependencies (no torch/transformers - see note below)
+        run: pip install pydantic==2.13.3 ruff==0.16.7 pytest==9.1.1
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Run tests
+        # Deliberately doesn't install torch/transformers/peft in CI: this repo's
+        # test suite (schema validation, dataset building, scoring logic,
+        # profile matching) is designed to run without the heavy ML stack -
+        # only src/train_lora.py and src/infer.py need it, and those need a
+        # GPU to be useful anyway, so they're run and verified locally, not in CI.
+        run: pytest tests/ -v
+
+      - name: Build dataset + seed validation (catches schema/data regressions)
+        run: |
+          python -m data.seed_postings
+          python -m src.dataset

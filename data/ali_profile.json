@@ -1,0 +1,17 @@
+{
+  "skills": [
+    "Python", "PyTorch", "TensorFlow", "Machine Learning", "Deep Learning",
+    "LLMs", "RAG", "Multi-Agent Systems", "Computer Vision", "NLP",
+    "FastAPI", "Docker", "SQL", "Pandas", "NumPy", "Scikit-learn",
+    "Anomalib", "FAISS", "Ollama"
+  ],
+  "seniority": "junior",
+  "german_level": "B2",
+  "english_level": "B2",
+  "arabic_native": true,
+  "location": "Augsburg, Bavaria, Germany",
+  "willing_to_relocate_within_germany": true,
+  "remote_ok": true,
+  "needs_visa_sponsorship": false,
+  "_comment": "needs_visa_sponsorship is false: Ali already holds a valid German residence/work status (see /profile.md - officially enrolled at FAU) rather than needing employer-sponsored relocation, so postings requiring visa sponsorship are not a blocker for him either way."
+}
