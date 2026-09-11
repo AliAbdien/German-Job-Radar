@@ -80,12 +80,46 @@ Growing this set (more hand-written examples, or a teacher-model-generated
 batch reviewed before adding) is the natural next step before this becomes
 something to actually rely on daily - see Limitations.
 
-## What's actually verified vs. what needs a GPU
+## Results: base model vs. fine-tuned
 
-This was built in a sandboxed environment with no GPU and no access to
-Hugging Face or the Bundesagentur für Arbeit API (both blocked by the
-environment's network policy). Everything that doesn't need either was
-built and verified for real:
+Trained for real on an RTX 3080 (10GB), 3 epochs over the 22-example training
+split, ~2 minutes end to end. Training loss dropped from 0.84 to 0.10 over
+the run (`train_loss` 0.398 averaged). Evaluated both the base model and the
+LoRA adapter on the same 5 held-out eval examples, same prompt, same decoding
+settings (greedy, `max_new_tokens=400`):
+
+| | Base model (zero-shot) | Fine-tuned (LoRA) |
+|---|---|---|
+| Parse success rate | **0 / 5 (0%)** | **4 / 5 (80%)** |
+| `job_title` / `company` / `seniority` / `remote_policy` / `visa` match | - (nothing parsed) | 1.0 on all, of the 4 parsed |
+| `salary.stated` exact | - | 1.0 |
+| `salary.min_eur` / `max_eur` exact | - | 0.75 / 0.75 |
+| `location` match | - | 0.5 |
+| `required_skills` F1 | - | 0.688 |
+| `nice_to_have_skills` F1 | - | 0.85 |
+| `required_languages` F1 | - | 0.5 |
+
+The headline finding: the base model, given the exact same schema-in-prompt
+instructions, couldn't produce output this eval could even parse as valid
+JSON on *any* of the 5 examples - it wandered past the JSON object and kept
+generating. The fine-tuned model parsed cleanly on 4/5 and got every
+categorical field right on those four; the one parse failure was a Pydantic
+validation error (missing `salary.stated`), not a JSON-syntax error, i.e.
+even the failure mode got more specific after fine-tuning.
+
+**Read this result at the right scale.** 5 eval examples is a tiny sample -
+this demonstrates that 22 hand-written examples are enough for LoRA to teach
+a 1.5B model *the output format and field discipline* this task needs, not
+that the model is production-ready. It answers "does fine-tuning help at
+all here" (clearly yes) rather than "how accurate is this in general" (needs
+a much bigger eval set to claim).
+
+## What's actually verified
+
+Built in a sandboxed environment with no GPU and no access to Hugging Face or
+the Bundesagentur für Arbeit API - so the schema, dataset, and scoring logic
+were verified there, and the GPU-dependent pieces (training, live API) were
+verified for real afterward, by me, on my own machine:
 
 - **`src/schema.py`** - the extraction schema, validated.
 - **`data/seed_postings.py`** - all 27 hand-written examples validate against
@@ -106,16 +140,18 @@ built and verified for real:
   runs on every push without needing torch/transformers/a GPU at all (see
   the CI file's own comment on why - the test suite is deliberately scoped
   to what doesn't need the heavy ML stack).
-
-**Not yet run** (needs a GPU and internet access this environment didn't
-have): `src/train_lora.py` (the actual LoRA fine-tune) and the
-base-vs-fine-tuned comparison in `src/eval.py`. The training script was
-written carefully against the standard `peft`/`transformers` LoRA pattern
-and passes static syntax/lint checks, but "compiles cleanly" is not the same
-claim as "trains correctly" - that only gets verified by actually running it.
-`docker`/HF downloads aside, this is the one piece of the project that
-still needs a real run on a real GPU before the headline "base vs.
-fine-tuned" numbers this README is building toward can be written honestly.
+- **`src/train_lora.py`** - run for real on an RTX 3080, see Results above.
+- **`src/jobsuche_client.py`** - the first version (written against the
+  documented endpoint shape without being able to reach the API) had two
+  real bugs a live run caught: a search path that doesn't exist on the
+  current API (`/pc/v4/jobs` - the gateway's 403 for an unmatched route
+  reads misleadingly like an auth failure) and a job-details endpoint shape
+  that isn't just the search path with a refnr appended (details are a
+  separate `pc/v4/jobdetails/{base64-encoded-refnr}` endpoint). Both fixed
+  against the current spec at
+  [bundesAPI/jobsuche-api](https://github.com/bundesAPI/jobsuche-api) - a
+  reminder that "written against the docs" and "actually works" are
+  different claims, which is exactly why this section exists.
 
 ## Setup
 
@@ -201,26 +237,27 @@ German-Job-Radar/
 
 ## Limitations
 
-- **The LoRA fine-tune itself has not been run yet** - see "What's actually
-  verified" above. Everything up to that point is real and tested; the
-  headline result this project is building toward (does fine-tuning
-  meaningfully beat the base model on this task) isn't written here because
-  it hasn't been measured yet.
-- **27 seed examples is small** for LoRA fine-tuning to reliably beat a
-  capable base model's zero-shot performance. Worth growing before trusting
-  the fine-tuned model's rankings for real job decisions - the base model
-  (with the same JSON-schema prompt) is a perfectly reasonable fallback in
-  the meantime.
+- **The eval set is 5 examples.** The base-vs-fine-tuned result above is real
+  and measured, not asserted, but 5 examples is enough to show a direction
+  (fine-tuning clearly helps on this task), not enough to claim a precise
+  accuracy number. Growing both the seed and eval sets is the natural next
+  step before trusting this for real filtering decisions.
+- **27 seed training examples is small** for LoRA fine-tuning to reliably
+  generalize across the full variety of real postings. The current result
+  shows the model learned the output *format and field discipline* well -
+  whether it generalizes to postings unlike anything in the 22 training
+  examples is untested.
 - **`profile_match.py`'s scoring is a transparent heuristic**, not learned -
   that's deliberate (see Design notes), but it means the weights (skills 40%,
   seniority 25%, language 20%, location 15%) are a reasonable starting
   point I chose, not something tuned against labeled outcome data I don't
   have (I don't have ground truth on which postings I'd actually get an
   interview for).
-- **`src/jobsuche_client.py` was written against the API's documented
-  response shape but not live-tested** in this environment (network-blocked).
-  Run `python -m src.jobsuche_client` once on a normal-internet machine to
-  confirm the response shape before relying on `scripts/collect_postings.py`.
+- **`src/jobsuche_client.py` had two real endpoint bugs**, found and fixed
+  by an actual live run (see "What's actually verified" above) rather than
+  by re-reading the docs harder. Worth a fresh live smoke test
+  (`python -m src.jobsuche_client`) after any future change to it, since
+  government API endpoints have changed shape before without notice.
 
 ## Companion projects
 
