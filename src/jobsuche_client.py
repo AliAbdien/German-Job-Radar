@@ -6,15 +6,24 @@ legally obtained (no scraping, no ToS violation, published for public reuse).
 Requires only a static, publicly-documented client ID header (no API key
 signup, no auth flow) - see the API's own docs for the current value.
 
-Live-tested 2026-09-11: the original version of this module used a wrong
-search path (`/pc/v4/jobs`, which doesn't exist - the gateway returns a 403
-"No match found for request for url" for any unmatched route, which reads
-misleadingly like an auth failure) and a wrong detail path/shape (job details
-are fetched from a *separate* `pc/v4/jobdetails/{refnr}` endpoint, where
-`refnr` must be base64-encoded first, not the same path as search with the
-refnr appended). Both fixed below against the current spec at
-https://github.com/bundesAPI/jobsuche-api - still worth a real run to confirm
-the response shape once more before trusting it for daily use.
+Live-tested 2026-09-11, two rounds of real bugs found and fixed:
+
+1. The original version used a wrong search path (`/pc/v4/jobs`, which
+   doesn't exist - the gateway returns a 403 "No match found for request for
+   url" for any unmatched route, which reads misleadingly like an auth
+   failure) and a wrong detail path/shape (job details are fetched from a
+   *separate* `pc/v4/jobdetails/{refnr}` endpoint, where `refnr` must be
+   base64-encoded first, not the same path as search with the refnr
+   appended). Fixed against the spec at
+   https://github.com/bundesAPI/jobsuche-api.
+2. After that fix, a live search returned 0 results with no error. Cause:
+   `wo` ("Beschäftigungsort") is a *free-text place search*, not a country
+   filter - "Deutschland" doesn't match any place name, so it silently
+   filtered out every result instead of erroring. Fixed by making `wo`
+   optional and omitting it from the request entirely when unset, which
+   searches nationwide (confirmed against the API's own parameter docs,
+   which describe `wo` as free-text location search with no country-level
+   option documented).
 """
 from __future__ import annotations
 
@@ -39,26 +48,28 @@ _HEADERS = {"X-API-Key": CLIENT_ID, "User-Agent": "German-Job-Radar/1.0"}
 
 def search_postings(
     was: str = "AI Engineer",
-    wo: str = "Deutschland",
+    wo: str = "",
     max_results: int = 100,
     page_size: int = 25,
 ) -> Iterator[dict]:
     """Yields raw posting-summary dicts from the Jobsuche API's search endpoint.
 
-    `was` = search term (job title / keywords), `wo` = location. The search
-    endpoint returns summaries; use `get_posting_detail` for the full text of
-    a specific posting (the summary alone usually isn't enough to extract
-    salary/skills from).
+    `was` = search term (job title / keywords). `wo` = free-text place name
+    (e.g. "Berlin", "Augsburg") - NOT a country; leave it empty (default) for
+    a nationwide search. Passing "Deutschland" or similar silently returns
+    zero results instead of erroring, since `wo` only matches actual place
+    names - see the module docstring for how that was found.
+    The search endpoint returns summaries; use `get_posting_detail` for the
+    full text of a specific posting (the summary alone usually isn't enough
+    to extract salary/skills from).
     """
     fetched = 0
     page = 1
     while fetched < max_results:
-        resp = requests.get(
-            SEARCH_URL,
-            headers=_HEADERS,
-            params={"was": was, "wo": wo, "size": min(page_size, max_results - fetched), "page": page},
-            timeout=15,
-        )
+        params = {"was": was, "size": min(page_size, max_results - fetched), "page": page}
+        if wo:
+            params["wo"] = wo
+        resp = requests.get(SEARCH_URL, headers=_HEADERS, params=params, timeout=15)
         resp.raise_for_status()
         payload = resp.json()
         results = payload.get("stellenangebote", [])

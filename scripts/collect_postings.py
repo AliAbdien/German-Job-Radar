@@ -23,7 +23,9 @@ from src.jobsuche_client import get_posting_detail, search_postings
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--was", default="AI Engineer", help="Search term (job title / keywords).")
-    parser.add_argument("--wo", default="Deutschland", help="Location.")
+    parser.add_argument(
+        "--wo", default="", help="Free-text place name (e.g. 'Berlin'). Empty = nationwide search."
+    )
     parser.add_argument("--n", type=int, default=20)
     parser.add_argument("--out", default="data/live_postings.jsonl")
     args = parser.parse_args()
