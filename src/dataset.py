@@ -32,7 +32,7 @@ def build_prompt(posting_text: str) -> str:
 
 
 def load_seed(path: Path = SEED_PATH) -> list[dict]:
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -61,10 +61,10 @@ def build_and_split(eval_fraction: float = 0.2, seed: int = 13) -> tuple[list[di
 
 def main() -> None:
     train_set, eval_set = build_and_split()
-    with TRAIN_OUT.open("w") as f:
+    with TRAIN_OUT.open("w", encoding="utf-8") as f:
         for ex in train_set:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
-    with EVAL_OUT.open("w") as f:
+    with EVAL_OUT.open("w", encoding="utf-8") as f:
         for ex in eval_set:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
     print(f"train: {len(train_set)} examples -> {TRAIN_OUT}")

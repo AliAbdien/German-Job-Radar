@@ -21,7 +21,7 @@ SENIORITY_MISMATCH_PENALTY = {0: 1.0, 1: 0.6, 2: 0.25}
 
 
 def load_profile(path: Path = PROFILE_PATH) -> dict:
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     profile = load_profile()
     scored = []
-    with open(args.extractions) as f:
+    with open(args.extractions, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue

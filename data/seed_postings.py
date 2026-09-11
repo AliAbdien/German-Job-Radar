@@ -681,7 +681,7 @@ def main() -> None:
             raise ValueError(f"Example {i} failed schema validation: {exc}") from exc
         validated.append(ex)
 
-    with OUT_PATH.open("w") as f:
+    with OUT_PATH.open("w", encoding="utf-8") as f:
         for ex in validated:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
 

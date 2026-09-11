@@ -83,7 +83,7 @@ def evaluate(
 ) -> dict:
     from src.infer import extract
 
-    with eval_path.open() as f:
+    with eval_path.open(encoding="utf-8") as f:
         records = [json.loads(line) for line in f if line.strip()]
 
     per_example_scores = []

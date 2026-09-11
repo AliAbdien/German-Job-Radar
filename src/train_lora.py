@@ -25,7 +25,7 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "models" / "lora-a
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 

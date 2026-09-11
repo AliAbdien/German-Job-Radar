@@ -35,7 +35,7 @@ def main() -> None:
 
     written = 0
     detail_failures = 0
-    with out_path.open("w") as f:
+    with out_path.open("w", encoding="utf-8") as f:
         for summary in search_postings(was=args.was, wo=args.wo, max_results=args.n):
             referenznummer = summary.get("referenznummer")
             if not referenznummer:
