@@ -11,6 +11,11 @@ data/eval.jsonl
 # LoRA adapter weights - large, regenerate locally with src/train_lora.py
 models/
 
+# Real scraped/fetched postings - eval-only, never committed (see README:
+# redistributing third-party posting text in a public repo is a real
+# copyright/ToS problem even for an official public API's content)
+data/live_postings.jsonl
+
 venv/
 .venv/
 *.egg-info/
