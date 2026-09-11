@@ -141,17 +141,23 @@ verified for real afterward, by me, on my own machine:
   the CI file's own comment on why - the test suite is deliberately scoped
   to what doesn't need the heavy ML stack).
 - **`src/train_lora.py`** - run for real on an RTX 3080, see Results above.
-- **`src/jobsuche_client.py`** - the first version (written against the
-  documented endpoint shape without being able to reach the API) had two
-  real bugs a live run caught: a search path that doesn't exist on the
-  current API (`/pc/v4/jobs` - the gateway's 403 for an unmatched route
-  reads misleadingly like an auth failure) and a job-details endpoint shape
-  that isn't just the search path with a refnr appended (details are a
-  separate `pc/v4/jobdetails/{base64-encoded-refnr}` endpoint). Both fixed
-  against the current spec at
-  [bundesAPI/jobsuche-api](https://github.com/bundesAPI/jobsuche-api) - a
-  reminder that "written against the docs" and "actually works" are
-  different claims, which is exactly why this section exists.
+- **`src/jobsuche_client.py`'s search endpoint** - the version written
+  without live access had three real bugs, found and fixed one by one by
+  actually running it: a search path that doesn't exist on the current API
+  (`/pc/v4/jobs` - the gateway's 403 for an unmatched route reads
+  misleadingly like an auth failure); `wo="Deutschland"` silently returning
+  zero results because `wo` is a free-text *place* search, not a country
+  filter; and, after both of those were fixed, a still-empty result caused
+  by reading the wrong response key (`stellenangebote`, which doesn't exist
+  in the v6 response - the real key is `ergebnisliste`, along with several
+  other field names that don't match what third-party docs claimed:
+  `stellenangebotsTitel` not `titel`, `firma` not `arbeitgeber`,
+  `referenznummer` not `refnr`). Confirmed against a raw dump of the live
+  response, not just against docs - "written against the docs" and
+  "actually works" turned out to be three separate claims here, which is
+  exactly why this section exists. **`get_posting_detail()` (the separate
+  endpoint for a posting's full text) is still unverified** - the search
+  fix was confirmed live, the detail endpoint wasn't yet.
 
 ## Setup
 
@@ -253,11 +259,12 @@ German-Job-Radar/
   point I chose, not something tuned against labeled outcome data I don't
   have (I don't have ground truth on which postings I'd actually get an
   interview for).
-- **`src/jobsuche_client.py` had two real endpoint bugs**, found and fixed
-  by an actual live run (see "What's actually verified" above) rather than
-  by re-reading the docs harder. Worth a fresh live smoke test
-  (`python -m src.jobsuche_client`) after any future change to it, since
-  government API endpoints have changed shape before without notice.
+- **`src/jobsuche_client.py`'s search side had three real bugs**, found and
+  fixed by an actual live run rather than by re-reading the docs harder (see
+  "What's actually verified" above). `get_posting_detail()` is still
+  unverified live - run `python -m scripts.collect_postings` and check
+  whether it prints a "[detail endpoint failed]" warning before trusting
+  the full posting text it returns.
 
 ## Companion projects
 

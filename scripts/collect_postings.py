@@ -34,21 +34,33 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0
+    detail_failures = 0
     with out_path.open("w") as f:
         for summary in search_postings(was=args.was, wo=args.wo, max_results=args.n):
-            refnr = summary.get("refnr")
-            if not refnr:
+            referenznummer = summary.get("referenznummer")
+            if not referenznummer:
                 continue
             try:
-                detail = get_posting_detail(refnr)
+                detail = get_posting_detail(referenznummer)
             except Exception as exc:  # noqa: BLE001 - one bad posting shouldn't kill the batch
-                print(f"  skipping {refnr}: {exc}")
-                continue
+                # get_posting_detail is still unverified live (see its docstring) -
+                # fall back to the search summary itself rather than silently
+                # dropping the posting, so a detail-endpoint problem doesn't
+                # look identical to "no postings found".
+                detail_failures += 1
+                if detail_failures == 1:
+                    print(f"  [detail endpoint failed] {exc} - falling back to search summaries")
+                detail = summary
             f.write(json.dumps(detail, ensure_ascii=False) + "\n")
             written += 1
-            print(f"  [{written}] {summary.get('titel')}")
+            print(f"  [{written}] {summary.get('stellenangebotsTitel')}")
 
     print(f"Wrote {written} live postings to {out_path}")
+    if detail_failures:
+        print(
+            f"  ({detail_failures} of {written} used the search summary as a fallback - "
+            "get_posting_detail() needs a look, see src/jobsuche_client.py)"
+        )
 
 
 if __name__ == "__main__":

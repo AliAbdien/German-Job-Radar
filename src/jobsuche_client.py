@@ -21,9 +21,15 @@ Live-tested 2026-09-11, two rounds of real bugs found and fixed:
    filter - "Deutschland" doesn't match any place name, so it silently
    filtered out every result instead of erroring. Fixed by making `wo`
    optional and omitting it from the request entirely when unset, which
-   searches nationwide (confirmed against the API's own parameter docs,
-   which describe `wo` as free-text location search with no country-level
-   option documented).
+   searches nationwide.
+3. Still 0 results after fix #2 - the actual bug. A raw response dump showed
+   the v6 response's results live under `ergebnisliste`, not `stellenangebote`
+   (the third-party docs I could reach without live access were simply wrong
+   on this key - a reminder that a written spec and a live response are not
+   the same source of truth). Also renamed field reads to match the real
+   payload: `stellenangebotsTitel` (not `titel`), `firma` (not `arbeitgeber`),
+   `stellenlokationen[0].adresse.ort` (not `arbeitsort.ort`), and critically
+   `referenznummer` (not `refnr`) - `get_posting_detail` takes this value.
 """
 from __future__ import annotations
 
@@ -72,7 +78,7 @@ def search_postings(
         resp = requests.get(SEARCH_URL, headers=_HEADERS, params=params, timeout=15)
         resp.raise_for_status()
         payload = resp.json()
-        results = payload.get("stellenangebote", [])
+        results = payload.get("ergebnisliste", [])
         if not results:
             break
         for item in results:
@@ -84,21 +90,36 @@ def search_postings(
         time.sleep(0.2)  # be a polite client of a free public API
 
 
-def get_posting_detail(refnr: str) -> dict:
+def get_posting_detail(referenznummer: str) -> dict:
     """Fetch the full posting (including free-text description) by reference number.
 
-    The detail endpoint takes the refnr base64-encoded, on its own path - not
-    the same shape as the search endpoint (see module docstring for the bug
-    this replaced).
+    `referenznummer` is the value under that key in a search result (NOT a
+    key called `refnr` - the search endpoint doesn't use that name; see the
+    module docstring). It's base64-encoded before hitting the detail
+    endpoint, which is a separate path from search, not the same shape with
+    the reference number appended.
+
+    NOTE: this endpoint itself is still unverified live as of the last fix -
+    the search endpoint fix was confirmed against real data, but nobody has
+    yet confirmed get_posting_detail's response shape against a real
+    referenznummer. Worth a live check before trusting its output shape.
     """
-    encoded_refnr = quote(base64.b64encode(refnr.encode()).decode(), safe="")
+    encoded_refnr = quote(base64.b64encode(referenznummer.encode()).decode(), safe="")
     resp = requests.get(f"{DETAIL_URL}/{encoded_refnr}", headers=_HEADERS, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
 
+def _location(posting: dict) -> str | None:
+    """Best-effort city name out of a search result's stellenlokationen list."""
+    locations = posting.get("stellenlokationen") or []
+    if not locations:
+        return None
+    return locations[0].get("adresse", {}).get("ort")
+
+
 if __name__ == "__main__":
     print("Searching for a handful of AI/ML postings in Germany...")
     for i, posting in enumerate(search_postings(was="AI Engineer", max_results=5)):
-        print(f"{i+1}. {posting.get('titel')} — {posting.get('arbeitgeber')} ({posting.get('arbeitsort', {}).get('ort')})")
-        print(f"   refnr: {posting.get('refnr')}")
+        print(f"{i+1}. {posting.get('stellenangebotsTitel')} — {posting.get('firma')} ({_location(posting)})")
+        print(f"   referenznummer: {posting.get('referenznummer')}")
